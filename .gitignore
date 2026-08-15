@@ -1,0 +1,25 @@
+# Model weights (downloaded by setup.sh, ~20 GB)
+models/*
+!models/qwen3.8-27b-nvfp4/
+models/qwen3.8-27b-nvfp4/*
+!models/qwen3.8-27b-nvfp4/.gitkeep
+
+# Python virtual environments (local build artifacts)
+.venv_download/
+unsloth-nvfp4-env/
+.venv/
+__pycache__/
+*.pyc
+
+# Downloaded CUDA repository package (host machine, ~3.8 GB)
+cuda-repo-*.deb
+cuda-ubuntu2604.pin
+
+# Local secrets / per-machine configuration
+.env
+
+# Editor and OS noise
+.vscode/
+.idea/
+.DS_Store
+*.swp

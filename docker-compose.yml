@@ -1,0 +1,61 @@
+# docker-compose.yml
+services:
+  vllm-qwen38-27b:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vllm-qwen38-27b
+    restart: "always"
+    ports:
+      - "8020:8000"
+    volumes:
+      # Model weights, downloaded by setup.sh, mounted read-only
+      - ./models/qwen3.8-27b-nvfp4:/models/qwen3.8-27b-nvfp4:ro
+    environment:
+      # CUDA und Optimierungs-Variablen
+      - CUDA_VISIBLE_DEVICES=0
+      - VLLM_WORKER_MULTIPROC_METHOD=spawn
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512
+      - VLLM_FLOAT32_MATMUL_PRECISION=high
+      - VLLM_NO_USAGE_STATS=1
+      # Quite high RAM demand for building graphs - 64 GB can be not enough - adjust for our system 
+      - MAX_JOBS=4
+      - NVCC_THREADS=4
+      # Secrets — loaded from .env (see .env.example), leave empty to disable auth
+      - VLLM_API_KEY=${VLLM_API_KEY:-}
+    shm_size: "16gb"
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1 # single RTX5090
+              capabilities: [gpu]
+    command:
+      - --model
+      - /models/qwen3.8-27b-nvfp4
+      - --served-model-name
+      - qwen3.8-27b
+      - --quantization
+      - modelopt
+      - --kv-cache-dtype
+      - fp8
+      - --tensor-parallel-size
+      - "1"
+      - --trust-remote-code
+      - --max-model-len
+      - "262144"
+      - --max-num-seqs
+      - "16"
+      - --gpu-memory-utilization
+      - "0.96"
+      - --reasoning-parser
+      - qwen3
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - qwen3_xml
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
