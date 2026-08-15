@@ -157,12 +157,17 @@ curl -u "$METRICS_USER:$METRICS_PASSWORD" http://localhost:8020/dcgm/metrics | g
 ssh -L 9090:localhost:9090 <host>   # then open http://localhost:9090
 ```
 
-Per-GPU metrics (DCGM: utilization, memory, power, temps) are part of the
-stack: the `dcgm-exporter` service (no host port) plus the `dcgm` Prometheus
-job (scrapes `dcgm-exporter:9400`). Read them through the gateway at
-`http://localhost:8020/dcgm/metrics` or query the `DCGM_*` series in Grafana
-Explore. Not needed? Delete the service + the `dcgm` job and
-`docker compose up -d`.
+Per-GPU metrics (utilization, memory, power, temps, fan, clock) are part of
+the stack: the `dcgm-exporter` service (no host port) plus the `dcgm`
+Prometheus job (scrapes `dcgm-exporter:9400`). The exporter is a small NVML
+sidecar built from public images (`dcgm-exporter/`) that emits the official
+`DCGM_FI_DEV_*` names — no nvcr.io/NGC login required; the NVML driver
+library is injected into the container by the NVIDIA container toolkit.
+Read them through the gateway at `http://localhost:8020/dcgm/metrics` or
+query the `DCGM_*` series in Grafana Explore. Prefer the official exporter?
+Replace the dcgm-exporter `build:` block in `docker-compose.yml` with
+`image: nvcr.io/nvidia/dcgm-exporter:3.3.9-3.6.0-ubuntu22.04`. Not needed?
+Delete the service + the `dcgm` job and `docker compose up -d`.
 
 ## Configuration
 
@@ -224,7 +229,7 @@ full lock of the known-good production container (frozen 2026-08-15):
 | Model weights | HF revision `69274a0d…` | `setup.sh` (override: `MODEL_REVISION`) |
 | Host driver (tested) | `610.43.02` (RTX 5090) | — |
 | caddy (API gateway, monitoring) | `2.11.4-alpine` | `docker-compose.yml` |
-| dcgm-exporter (per-GPU metrics) | `3.3.9-3.6.0-ubuntu22.04` | `docker-compose.yml` |
+| dcgm-exporter (GPU metrics sidecar) | `python:3.13-slim` + `nvidia-ml-py 13.610.43` | `dcgm-exporter/Dockerfile` |
 | prometheus (metrics) | `v3.13.2` | `docker-compose.yml` |
 | grafana (dashboards) | `11.1.4` | `docker-compose.yml` |
 
@@ -244,6 +249,7 @@ setup.sh                            host prerequisites + model download (~20 GB)
 caddy/Caddyfile                   Basic-auth gateway: /v1/*, /metrics, /dcgm/metrics (port 8020)
 prometheus/prometheus.yml          Prometheus scrape config (vllm + dcgm jobs)
 grafana/                           auto-provisioned datasource + vLLM dashboard
+dcgm-exporter/                    NVML → Prometheus sidecar (DCGM_FI_DEV_* names, no NGC login)
 models/qwen3.8-27b-nvfp4/           model weights (empty in git, filled by setup.sh)
 ```
 

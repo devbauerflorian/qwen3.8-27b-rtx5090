@@ -142,12 +142,21 @@ services:
     depends_on:
       - prometheus
 
-  # Per-GPU metrics (utilization, memory, power, temps). Exports /metrics
-  # on the docker network only (Prometheus scrapes dcgm-exporter:9400);
-  # public access goes through the caddy gateway on 8020 (/dcgm/metrics) —
-  # no host port of its own. See prometheus/prometheus.yml (job "dcgm").
+  # Per-GPU metrics (utilization, memory, power, temps). Exposes
+  # DCGM_FI_DEV_* names on the docker network only (Prometheus scrapes
+  # dcgm-exporter:9400); public access goes through the caddy gateway on
+  # 8020 (/dcgm/metrics) — no host port of its own.
+  # See prometheus/prometheus.yml (job "dcgm").
+  #
+  # Built from a public base image + pypi (dcgm-exporter/), so no nvcr.io
+  # (NGC registry) login is needed. The exporter only needs the NVML
+  # driver library, which the NVIDIA container toolkit injects into any
+  # container that reserves the GPU.
+  # Prefer the official image? Replace the `build:` block with:
+  #   image: nvcr.io/nvidia/dcgm-exporter:3.3.9-3.6.0-ubuntu22.04
   dcgm-exporter:
-    image: nvcr.io/nvidia/dcgm-exporter:3.3.9-3.6.0-ubuntu22.04
+    build:
+      context: dcgm-exporter
     container_name: dcgm-exporter
     restart: "always"
     environment:

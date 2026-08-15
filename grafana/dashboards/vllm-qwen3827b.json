@@ -7,7 +7,7 @@
   "refresh": "30s",
   "time": { "from": "now-6h", "to": "now" },
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "templating": { "list": [] },
   "annotations": {
     "list": [
@@ -122,7 +122,7 @@
         "overrides": []
       },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "targets": [ { "expr": "sum by (success) (rate(vllm:request_success_total[5m]))", "legendFormat": "success={{success}}", "refId": "A" } ]
+      "targets": [         { "expr": "sum by (finished_reason) (rate(vllm:request_success_total[5m]))", "legendFormat": "{{finished_reason}}", "refId": "A" } ]
     },
     {
       "id": 6,
@@ -268,6 +268,91 @@
         { "expr": "sum(increase(vllm:prompt_tokens_total[1d]))", "legendFormat": "input (24h)", "refId": "A" },
         { "expr": "sum(increase(vllm:generation_tokens_total[1d]))", "legendFormat": "output (24h)", "refId": "B" }
       ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "GPU utilization (DCGM)",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 64 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "fillOpacity": 10, "lineWidth": 1 }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green" }, { "color": "orange", "value": 80 }, { "color": "red", "value": 95 } ] } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [ { "expr": "max(DCGM_FI_DEV_GPU_UTIL)", "legendFormat": "{{gpu}}", "refId": "A" } ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "GPU memory (MiB)",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 64 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "mib", "custom": { "fillOpacity": 10, "lineWidth": 1 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "max(DCGM_FI_DEV_MEMORY_USED)", "legendFormat": "used", "refId": "A" },
+        { "expr": "max(DCGM_FI_DEV_MEMORY_TOTAL)", "legendFormat": "total", "refId": "B" }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "GPU power (W)",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 64 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "watt", "custom": { "fillOpacity": 10, "lineWidth": 1 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [ { "expr": "max(DCGM_FI_DEV_POWER_USAGE)", "legendFormat": "power", "refId": "A" } ]
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "GPU temperature (C)",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 64 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "celsius", "custom": { "fillOpacity": 10, "lineWidth": 1 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [ { "expr": "max(DCGM_FI_DEV_GPU_TEMP)", "legendFormat": "temp", "refId": "A" } ]
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "Failed / aborted requests (per second)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 72 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 1 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "sum(rate(vllm:request_success_total{finished_reason=\"error\"}[5m]))", "legendFormat": "errors", "refId": "A" },
+        { "expr": "sum(rate(vllm:request_success_total{finished_reason=\"abort\"}[5m]))", "legendFormat": "aborts", "refId": "B" }
+      ]
+    },
+    {
+      "id": 26,
+      "type": "stat",
+      "title": "Errors (1h)",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 72 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green" }, { "color": "red", "value": 1 } ] } },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "auto" },
+      "targets": [ { "expr": "sum(increase(vllm:request_success_total{finished_reason=\"error\"}[1h]))", "legendFormat": "errors", "refId": "A" } ]
+    },
+    {
+      "id": 27,
+      "type": "stat",
+      "title": "Aborted (1h)",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 72 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green" }, { "color": "orange", "value": 1 } ] } },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "auto" },
+      "targets": [ { "expr": "sum(increase(vllm:request_success_total{finished_reason=\"abort\"}[1h]))", "legendFormat": "aborted", "refId": "A" } ]
     }
   ]
 }
