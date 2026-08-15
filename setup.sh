@@ -26,6 +26,8 @@ sudo systemctl restart docker
 # Configure paths
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 MODEL_DIR="${MODEL_DIR:-${ROOT_DIR}/models}"
+# Model (Apache-2.0, RTX 5090 NVFP4 export of Qwen/Qwen3.8-27B):
+#   https://huggingface.co/gittensor-model-hub/Qwen3.8-27B-NVFP4-RTX5090
 MODEL_REPO="gittensor-model-hub/Qwen3.8-27B-NVFP4-RTX5090"
 MODEL_SUBDIR="qwen3.8-27b-nvfp4"
 VENV_DIR="${ROOT_DIR}/.venv_download"
