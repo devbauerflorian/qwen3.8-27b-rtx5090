@@ -33,6 +33,8 @@
 		basic_auth {
 			{$METRICS_USER} {$METRICS_HASH}
 		}
+		# If VLLM_API_KEY is empty (auth disabled upstream), this becomes
+		# "Authorization: Bearer " — vLLM ignores it when running keyless.
 		request_header Authorization "Bearer {$VLLM_API_KEY}"
 		reverse_proxy vllm:8000
 	}
