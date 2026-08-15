@@ -25,6 +25,7 @@ RUN apt-get update && \
 RUN curl -Lfsso /tmp/uv.tar.gz \
         https://github.com/astral-sh/uv/releases/download/0.12.5/uv-x86_64-unknown-linux-gnu.tar.gz && \
     tar -xzf /tmp/uv.tar.gz -C /tmp && \
+    mkdir -p /root/.local/bin && \
     mv /tmp/uv-x86_64-unknown-linux-gnu/uv /root/.local/bin/uv && \
     rm -rf /tmp/uv.tar.gz /tmp/uv-x86_64-unknown-linux-gnu
 
