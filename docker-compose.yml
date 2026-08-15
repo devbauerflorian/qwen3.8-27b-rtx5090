@@ -1,18 +1,25 @@
 # docker-compose.yml
+#
+# Model selection comes from .env (see .env.example); unset keys keep the
+# defaults, which serve the stock Qwen3.8-27B NVFP4 model:
+#   MODEL_SUBDIR        weights dir under ./models/ (setup.sh downloads into it)
+#   SERVED_MODEL_NAME   value for --served-model-name
+#   VLLM_API_KEY        bearer key, empty = no auth
+#
 services:
-  vllm-qwen38-27b:
+  vllm:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: vllm-qwen38-27b
+    container_name: ${CONTAINER_NAME:-vllm}
     restart: "always"
     ports:
       - "8020:8000"
     volumes:
       # Model weights, downloaded by setup.sh, mounted read-only
-      - ./models/qwen3.8-27b-nvfp4:/models/qwen3.8-27b-nvfp4:ro
+      - ./models/${MODEL_SUBDIR:-qwen3.8-27b-nvfp4}:/models/${MODEL_SUBDIR:-qwen3.8-27b-nvfp4}:ro
     environment:
-      # CUDA und Optimierungs-Variablen
+      # CUDA and optimizer tuning
       - CUDA_VISIBLE_DEVICES=0
       - VLLM_WORKER_MULTIPROC_METHOD=spawn
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512
@@ -34,9 +41,9 @@ services:
               capabilities: [gpu]
     command:
       - --model
-      - /models/qwen3.8-27b-nvfp4
+      - /models/${MODEL_SUBDIR:-qwen3.8-27b-nvfp4}
       - --served-model-name
-      - qwen3.8-27b
+      - ${SERVED_MODEL_NAME:-qwen3.8-27b}
       - --quantization
       - modelopt
       - --kv-cache-dtype

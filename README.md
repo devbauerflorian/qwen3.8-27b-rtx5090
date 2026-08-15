@@ -87,6 +87,31 @@ Most knobs live in `docker-compose.yml`:
 | `--trust-remote-code` | — | required by the NVFP4 (modelopt) config |
 | `shm_size` | `16gb` | needed for multi-process workers |
 
+## Switching the model
+
+The Docker image only ships vLLM — no model is baked in. Both `setup.sh` and
+`docker compose` read the `.env` keys below; unset keys keep the defaults for
+the stock Qwen3.8-27B NVFP4 model:
+
+| Key | Meaning | Default |
+|---|---|---|
+| `MODEL_REPO` | Hugging Face repo to download | `gittensor-model-hub/Qwen3.8-27B-NVFP4-RTX5090` |
+| `MODEL_SUBDIR` | local weights dir under `./models/` (and the container mount) | `qwen3.8-27b-nvfp4` |
+| `SERVED_MODEL_NAME` | value for `--served-model-name` | `qwen3.8-27b` |
+| `CONTAINER_NAME` | container name | `vllm` |
+
+To serve a different model:
+
+1. set `MODEL_REPO` + `MODEL_SUBDIR` (+ `SERVED_MODEL_NAME`) in `.env`
+2. `./setup.sh` — downloads the weights into `./models/$MODEL_SUBDIR/`
+3. `docker compose up -d --build`
+
+Model-specific serve flags (`--quantization`, `--kv-cache-dtype`, parsers, …)
+deliberately stay explicit in `docker-compose.yml`. If your model needs
+different ones, provide a full replacement of the `command` list in a second
+file, e.g. `mymodel.yml`, and run
+`docker compose -f docker-compose.yml -f mymodel.yml up -d`.
+
 ## Project layout
 
 ```
