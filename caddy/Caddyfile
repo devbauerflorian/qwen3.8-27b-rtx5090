@@ -1,0 +1,52 @@
+# Public gateway for the vLLM server, host port 8020.
+#
+# caddy owns the port clients have always used for the API; the vllm
+# container is internal-only. Only three paths are routed — everything
+# else is not secured and falls through to caddy's empty default response.
+# All routed paths require HTTP Basic auth (METRICS_USER / METRICS_HASH
+# from .env; caddy fails closed if METRICS_HASH is unset):
+#   /v1, /v1/*  -> vLLM (caddy translates Basic auth into the vLLM bearer
+#                  token, VLLM_API_KEY from .env, for the upstream call)
+#   /metrics    -> vLLM /metrics (telemetry)
+#   /dcgm/*     -> dcgm-exporter /metrics (per-GPU telemetry, prefix
+#                  stripped: /dcgm/metrics -> /metrics)
+#
+# Note (caddy 2.11): `header_up` was renamed — request header changes use
+# `request_header`. And `realm` is not supported in basic_auth here (the line
+# would be misparsed as a username/password entry).
+{
+	admin off
+}
+
+:8020 {
+	# (caddy 2.11: multiple paths need a named matcher, not `handle /v1 /v1/*`)
+	@v1 {
+		path /v1 /v1/*
+	}
+	@metrics {
+		path /metrics
+	}
+	@dcgm {
+		path /dcgm/*
+	}
+	handle @v1 {
+		basic_auth {
+			{$METRICS_USER} {$METRICS_HASH}
+		}
+		request_header Authorization "Bearer {$VLLM_API_KEY}"
+		reverse_proxy vllm:8000
+	}
+	handle @metrics {
+		basic_auth {
+			{$METRICS_USER} {$METRICS_HASH}
+		}
+		reverse_proxy vllm:8000
+	}
+	handle @dcgm {
+		basic_auth {
+			{$METRICS_USER} {$METRICS_HASH}
+		}
+		uri strip_prefix /dcgm
+		reverse_proxy dcgm-exporter:9400
+	}
+}

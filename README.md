@@ -56,18 +56,20 @@ cp .env.example .env
 # 3. Build and start (first build takes a while)
 docker compose up -d --build
 
-# 4. Check it serves
-curl http://localhost:8020/v1/models
+# 4. Check it serves (401 without Basic auth is expected)
+curl -u "$METRICS_USER:$METRICS_PASSWORD" http://localhost:8020/v1/models
 ```
 
-The service listens on `http://localhost:8020` (container port 8000) and is
-served under the model name `qwen3.8-27b`.
+The API is exposed on `http://localhost:8020` through the caddy gateway
+(HTTP Basic auth: `METRICS_USER` / `METRICS_PASSWORD` from `.env`; caddy
+translates it into the vLLM bearer key upstream). vLLM itself is
+internal-only (container port 8000, docker network) and is served under the
+model name `qwen3.8-27b`.
 
 ### Using the API
 
 ```bash
-curl http://localhost:8020/v1/chat/completions \
-  -H "Authorization: Bearer $VLLM_API_KEY" \
+curl -u "$METRICS_USER:$METRICS_PASSWORD" http://localhost:8020/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "qwen3.8-27b",
@@ -79,10 +81,20 @@ curl http://localhost:8020/v1/chat/completions \
 Any OpenAI SDK works, e.g. with Python:
 
 ```python
-import os
+import base64, os
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8020/v1", api_key=os.environ["VLLM_API_KEY"])
+# The 8020 endpoint is fronted by the caddy gateway: it speaks HTTP Basic
+# auth and forwards to vLLM with its own bearer key. `api_key` just needs
+# to be non-empty — authentication happens via the Authorization header.
+cred = base64.b64encode(
+    f"{os.environ['METRICS_USER']}:{os.environ['METRICS_PASSWORD']}".encode()
+).decode()
+client = OpenAI(
+    base_url="http://localhost:8020/v1",
+    api_key="caddy-gateway",
+    default_headers={"Authorization": f"Basic {cred}"},
+)
 resp = client.chat.completions.create(
     model="qwen3.8-27b",
     messages=[{"role": "user", "content": "Hello!"}],
@@ -106,9 +118,51 @@ docker logs -f vllm
 |---|---|
 | stuck in "Compiling kernels…" / `nvcc` | normal first boot (JIT); skipped on later boots |
 | OOM crash during graph capture | lower `MAX_JOBS` / `NVCC_THREADS` (e.g. `2`) |
-| port 8020 in use | change the host port in `docker-compose.yml` `ports` |
+| port 8020 in use | change the caddy host port in `docker-compose.yml` `ports` (and the site line in `caddy/Caddyfile` if you move the container port too) |
 | "model folder … does not exist" | `setup.sh` missing/incomplete — weights absent in `./models/` |
-| HTTP 401 from the API | `VLLM_API_KEY` set in `.env` — send it as `Authorization: Bearer …` |
+| HTTP 401 from the API | the caddy gateway requires Basic auth — send `METRICS_USER` / `METRICS_PASSWORD` from `.env` (`curl -u user:pass`) |
+| Basic auth on `:8020/…` | use `METRICS_USER` / `METRICS_PASSWORD` from `.env` (caddy gateway) |
+| `:8020` no longer serves `/metrics` open | by design — every caddy route requires Basic auth; Prometheus scrapes `vllm:8000` + `dcgm-exporter:9400` on the docker network instead; block 8020 in your firewall if you want no external exposure at all |
+
+## Monitoring (Prometheus + Grafana)
+
+The compose stack includes a small monitoring sidecar set — it just comes up
+with `docker compose up -d`:
+
+| Service | Port | What it does |
+|---|---|---|
+| `vllm` | — | internal-only: caddy and Prometheus reach it on the docker network (`vllm:8000`); the bearer key `VLLM_API_KEY` is what caddy sends upstream |
+| `caddy` | `8020` | Basic-auth gateway on the old vLLM port: routes `/v1/*` (translates Basic auth into the vLLM bearer token), `/metrics` (vLLM telemetry) and `/dcgm/metrics` (per-GPU telemetry); `METRICS_USER` / `METRICS_PASSWORD` from `.env` |
+| `dcgm-exporter` | — | DCGM exporter (util, memory, power, temps); public access via `8020/dcgm/metrics`, no host port |
+| `prometheus` | `127.0.0.1:9090` | scrapes `vllm:8000/metrics` + `dcgm-exporter:9400` every 15 s, 30 d retention (host-local only — reach it via SSH tunnel if needed) |
+| `grafana` | `3000` | dashboard auto-provisioned under folder **vllm** ("vLLM — Qwen3.8-27B (RTX5090)"): running/waiting requests, token throughput, TTFT / E2E / inter-token latency, KV-cache utilization, preemptions, prefix-cache hit ratio |
+
+Grafana login: `admin` / `GRAFANA_ADMIN_PASSWORD` from `.env`.
+
+Exposure posture: Grafana is open on all interfaces (3000) and protected by
+the `.env` admin password (sign-ups disabled); Prometheus stays loopback-only
+(9090 — SSH tunnel). The only open API port is 8020 (the caddy gateway) and
+every route behind it is Basic-authed, so nothing is exposed unauthenticated.
+If this box faces the internet, put 8020/3000 behind a firewall or Tailnet.
+On a fresh checkout `caddy` stays down until `METRICS_HASH` is generated in
+`.env` (fail-closed — nothing is exposed unauthenticated in the meantime).
+
+```bash
+# /v1/* via the Basic-auth gateway on 8020
+curl -u "$METRICS_USER:$METRICS_PASSWORD" http://localhost:8020/v1/models
+
+# vLLM + per-GPU telemetry through the gateway (Basic auth)
+curl -u "$METRICS_USER:$METRICS_PASSWORD" http://localhost:8020/metrics | grep -m1 vllm:generation_tokens
+curl -u "$METRICS_USER:$METRICS_PASSWORD" http://localhost:8020/dcgm/metrics | grep -m1 DCGM_FI_DEV_GPU_UTIL
+ssh -L 9090:localhost:9090 <host>   # then open http://localhost:9090
+```
+
+Per-GPU metrics (DCGM: utilization, memory, power, temps) are part of the
+stack: the `dcgm-exporter` service (no host port) plus the `dcgm` Prometheus
+job (scrapes `dcgm-exporter:9400`). Read them through the gateway at
+`http://localhost:8020/dcgm/metrics` or query the `DCGM_*` series in Grafana
+Explore. Not needed? Delete the service + the `dcgm` job and
+`docker compose up -d`.
 
 ## Configuration
 
@@ -116,11 +170,11 @@ Most knobs live in `docker-compose.yml`:
 
 | Setting | Value | Notes |
 |---|---|---|
-| Host port | `8020` | container port `8000` is fixed |
+| Gateway port | `8020` | caddy host port (was the direct vLLM port); vLLM container port `8000` is internal-only (docker network) |
 | `VLLM_API_KEY` | from `.env` | empty = no authentication |
 | GPU | 1x, `CUDA_VISIBLE_DEVICES=0` | single RTX 5090 |
 | `MAX_JOBS` / `NVCC_THREADS` | `4` | lower these on machines with less RAM |
-| `--gpu-memory-utilization` | `0.96` | upstream card benchmarks at `0.97` (KV pool ≈ 276K tokens, full 256K); `0.90` holds only ~205K |
+| `--gpu-memory-utilization` | `0.95` | upstream card benchmarks at `0.97` (KV pool ≈ 276K tokens, full 256K); `0.90` holds only ~205K |
 | `--max-model-len` | `262144` | 256K context |
 | `--kv-cache-dtype` | `fp8` | halves KV cache VRAM, longer contexts |
 | `--trust-remote-code` | — | required by the NVFP4 (modelopt) config |
@@ -169,6 +223,10 @@ full lock of the known-good production container (frozen 2026-08-15):
 | NVIDIA container toolkit | `1.20.0-1` | `setup.sh` |
 | Model weights | HF revision `69274a0d…` | `setup.sh` (override: `MODEL_REVISION`) |
 | Host driver (tested) | `610.43.02` (RTX 5090) | — |
+| caddy (API gateway, monitoring) | `2.11.4-alpine` | `docker-compose.yml` |
+| dcgm-exporter (per-GPU metrics) | `3.3.9-3.6.0-ubuntu22.04` | `docker-compose.yml` |
+| prometheus (metrics) | `v3.13.2` | `docker-compose.yml` |
+| grafana (dashboards) | `11.1.4` | `docker-compose.yml` |
 
 Updating the pins: change the relevant lines, rebuild the image, re-run the
 smoke test (`curl /v1/models` + a short chat), and commit. For a new
@@ -183,6 +241,9 @@ Dockerfile                          vLLM + flashinfer + CUTLASS DSL image (NVFP4
 docker-compose.yml                  service definition (ports, volumes, serve flags)
 setup.sh                            host prerequisites + model download (~20 GB)
 .env.example                        secret template (copy to .env)
+caddy/Caddyfile                   Basic-auth gateway: /v1/*, /metrics, /dcgm/metrics (port 8020)
+prometheus/prometheus.yml          Prometheus scrape config (vllm + dcgm jobs)
+grafana/                           auto-provisioned datasource + vLLM dashboard
 models/qwen3.8-27b-nvfp4/           model weights (empty in git, filled by setup.sh)
 ```
 
@@ -216,4 +277,4 @@ requests, 5/5 tool-call smoke tests, and accuracy on par with
 accuracy/faster decode for the same 32 GB envelope — worth re-checking.
 
 The weights are pulled into `./models/qwen3.8-27b-nvfp4/` by `setup.sh` and are
-**not** part of this repository; this repo's tooling is MIT-licensed (see `LICENSE`).
+**not** part of this repository; this repo's tooling is MIT-licensed (see `LICENSE.md`).

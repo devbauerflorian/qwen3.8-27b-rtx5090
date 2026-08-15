@@ -13,8 +13,9 @@ services:
       dockerfile: Dockerfile
     container_name: ${CONTAINER_NAME:-vllm}
     restart: "always"
-    ports:
-      - "8020:8000"
+    # No host port: vllm is internal-only. The caddy gateway on 8020 (the
+    # port clients have always used for the API) and Prometheus reach it on
+    # the docker network at vllm:8000.
     volumes:
       # Model weights, downloaded by setup.sh, mounted read-only
       - ./models/${MODEL_SUBDIR:-qwen3.8-27b-nvfp4}:/models/${MODEL_SUBDIR:-qwen3.8-27b-nvfp4}:ro
@@ -56,9 +57,10 @@ services:
       - --max-num-seqs
       - "16"
       - --gpu-memory-utilization
-      - "0.96"
+      - "0.95"
       - --reasoning-parser
       - qwen3
+      - --enable-prefix-caching
       - --enable-auto-tool-choice
       - --tool-call-parser
       - qwen3_xml
@@ -66,3 +68,100 @@ services:
       - 0.0.0.0
       - --port
       - "8000"
+
+  # Public gateway on host port 8020 — the port clients have always used
+  # for the API; it is now owned by caddy, and the vllm container is
+  # internal-only. Every routed path requires HTTP Basic auth
+  # (METRICS_USER / METRICS_HASH from .env):
+  #   /v1, /v1/*    -> vLLM (caddy translates Basic auth into the vLLM
+  #                    bearer token, VLLM_API_KEY from .env, upstream)
+  #   /metrics      -> vLLM telemetry
+  #   /dcgm/metrics -> dcgm-exporter /metrics (per-GPU telemetry)
+  # Everything else falls through to caddy's empty default response.
+  caddy:
+    # fail-closed: caddy refuses to start if METRICS_HASH is unset (basic
+    # auth cannot work without it) — fill .env first on a fresh stack
+    image: caddy:2.11.4-alpine
+    container_name: caddy-vllm
+    restart: "always"
+    ports:
+      - "8020:8020"
+    environment:
+      - METRICS_USER=${METRICS_USER:-metrics}
+      - METRICS_HASH=${METRICS_HASH:-}
+      - VLLM_API_KEY=${VLLM_API_KEY:-}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - vllm
+      - dcgm-exporter
+
+  # Scrapes vllm:8000/metrics and dcgm-exporter:9400 (see
+  # prometheus/prometheus.yml).
+  # UI bound to 127.0.0.1:9090 — no public exposure, access locally or via
+  # SSH tunnel. 30 days of data kept in the prometheus_data volume.
+  prometheus:
+    image: prom/prometheus:v3.13.2
+    container_name: prometheus
+    restart: "always"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - vllm
+      - dcgm-exporter
+
+  # vLLM dashboard is auto-provisioned from ./grafana/dashboards/ (folder
+  # "vllm"). Login: admin / GRAFANA_ADMIN_PASSWORD from .env.
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: grafana
+    restart: "always"
+    ports:
+      - "0.0.0.0:3000:3000"
+    environment:
+      # note: applied only on first Grafana DB init (fresh grafana_data
+      # volume); rotate the admin password later via the Grafana UI
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  # Per-GPU metrics (utilization, memory, power, temps). Exports /metrics
+  # on the docker network only (Prometheus scrapes dcgm-exporter:9400);
+  # public access goes through the caddy gateway on 8020 (/dcgm/metrics) —
+  # no host port of its own. See prometheus/prometheus.yml (job "dcgm").
+  dcgm-exporter:
+    image: nvcr.io/nvidia/dcgm-exporter:3.3.9-3.6.0-ubuntu22.04
+    container_name: dcgm-exporter
+    restart: "always"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  caddy_data:
+  caddy_config:
+  prometheus_data:
+  grafana_data:

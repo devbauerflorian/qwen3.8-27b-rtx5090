@@ -1,0 +1,273 @@
+{
+  "title": "vLLM — Qwen3.8-27B (RTX5090)",
+  "uid": "vllm-qwen3827b",
+  "tags": ["vllm", "qwen3.8-27b"],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "schemaVersion": 39,
+  "version": 1,
+  "templating": { "list": [] },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Requests running",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "blue" } ] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "auto" },
+      "targets": [ { "expr": "max(vllm:num_requests_running)", "legendFormat": "running", "refId": "A" } ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Requests waiting",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green" }, { "color": "red", "value": 1 } ] } },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "auto" },
+      "targets": [
+        { "expr": "max(vllm:num_requests_waiting)", "legendFormat": "total", "refId": "A" },
+        { "expr": "sum by (reason) (vllm:num_requests_waiting_by_reason)", "legendFormat": "{{reason}}", "refId": "B" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "gauge",
+      "title": "KV cache utilization",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [ { "color": "green" }, { "color": "orange", "value": 80 }, { "color": "red", "value": 95 } ] } },
+        "overrides": []
+      },
+      "options": { "showMinMax": false },
+      "targets": [ { "expr": "max(vllm:kv_cache_usage_perc) * 100", "legendFormat": "kv-cache", "refId": "A" } ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "TTFT p95 (5m)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [ { "color": "green" } ] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "auto" },
+      "targets": [ { "expr": "histogram_quantile(0.95, sum(rate(vllm:time_to_first_token_seconds_bucket[5m])) by (le))", "legendFormat": "ttft p95", "refId": "A" } ]
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Input (prompt) tokens — shown range",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "blue" } ] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "auto" },
+      "targets": [ { "expr": "sum(increase(vllm:prompt_tokens_total[$__range]))", "legendFormat": "input", "refId": "A" } ]
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Output (generated) tokens — shown range",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green" } ] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "auto" },
+      "targets": [ { "expr": "sum(increase(vllm:generation_tokens_total[$__range]))", "legendFormat": "output", "refId": "A" } ]
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Input tokens (since start)",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "blue" } ] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "auto" },
+      "targets": [ { "expr": "sum(vllm:prompt_tokens_total)", "legendFormat": "input total", "refId": "A" } ]
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Output tokens (since start)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green" } ] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "auto" },
+      "targets": [ { "expr": "sum(vllm:generation_tokens_total)", "legendFormat": "output total", "refId": "A" } ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Requests per second (finished)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10, "lineWidth": 1 } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "expr": "sum by (success) (rate(vllm:request_success_total[5m]))", "legendFormat": "success={{success}}", "refId": "A" } ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Token throughput (tokens/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 1 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum(rate(vllm:generation_tokens_total[5m]))", "legendFormat": "generation (tok/s)", "refId": "A" },
+        { "expr": "sum(rate(vllm:prompt_tokens_total[5m]))", "legendFormat": "prompt (tok/s)", "refId": "B" },
+        { "expr": "sum(rate(vllm:prompt_tokens_cached_total[5m]))", "legendFormat": "cached prefix (tok/s)", "refId": "C" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "E2E request latency (p50 / p95 / p99)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 1 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(vllm:e2e_request_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(vllm:e2e_request_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p99", "refId": "C" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Time per output token (decode speed, p50 / p95)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 1 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(vllm:inter_token_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p50 s/token", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(vllm:inter_token_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p95 s/token", "refId": "B" }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Prefill / decode time (p95)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 1 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(vllm:request_prefill_time_seconds_bucket[5m])) by (le))", "legendFormat": "prefill p95", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(vllm:request_decode_time_seconds_bucket[5m])) by (le))", "legendFormat": "decode p95", "refId": "B" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "KV cache utilization",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "fillOpacity": 10, "lineWidth": 1 }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green" }, { "color": "orange", "value": 80 }, { "color": "red", "value": 95 } ] } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [ { "expr": "max(vllm:kv_cache_usage_perc) * 100", "legendFormat": "kv-cache", "refId": "A" } ]
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Preemptions (last 1h)",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green" }, { "color": "orange", "value": 1 } ] } },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "auto" },
+      "targets": [ { "expr": "increase(vllm:num_preemptions_total[1h])", "legendFormat": "preemptions", "refId": "A" } ]
+    },
+    {
+      "id": 12,
+      "type": "gauge",
+      "title": "Prefix cache hit ratio (5m)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "mode": "absolute", "steps": [ { "color": "blue" }, { "color": "green", "value": 0.5 } ] } },
+        "overrides": []
+      },
+      "options": {},
+      "targets": [
+        { "expr": "sum(rate(vllm:prefix_cache_hits_total[5m])) / sum(rate(vllm:prefix_cache_queries_total[5m]))", "legendFormat": "hit ratio", "refId": "A" }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Prompt tokens by source (last 1h)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 50, "lineWidth": 1 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "stacking": { "mode": "normal", "show": true } },
+      "targets": [ { "expr": "sum by (source) (increase(vllm:prompt_tokens_by_source_total[1h]))", "legendFormat": "{{source}}", "refId": "A" } ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Generated tokens per request (p50 / p95)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 1 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(vllm:request_generation_tokens_bucket[5m])) by (le))", "legendFormat": "p50 tokens/request", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(vllm:request_generation_tokens_bucket[5m])) by (le))", "legendFormat": "p95 tokens/request", "refId": "B" }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Scheduler: iterations/s and tokens per iteration",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 48 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 1 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "sum(rate(vllm:iteration_tokens_total_count[5m]))", "legendFormat": "iterations/s", "refId": "A" },
+        { "expr": "sum(rate(vllm:iteration_tokens_total_sum[5m])) / sum(rate(vllm:iteration_tokens_total_count[5m]))", "legendFormat": "tokens per iteration", "refId": "B" }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Tokens per day (input / output)",
+      "description": "Trailing-24h token volume per day. Bars collapsing to zero mark a vLLM restart (counters reset). Use a wide time range (e.g. 30d) for usage trends.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 56 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 50, "lineWidth": 1 }, "thresholds": { "mode": "absolute", "steps": [ { "color": "blue" } ] } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum(increase(vllm:prompt_tokens_total[1d]))", "legendFormat": "input (24h)", "refId": "A" },
+        { "expr": "sum(increase(vllm:generation_tokens_total[1d]))", "legendFormat": "output (24h)", "refId": "B" }
+      ]
+    }
+  ]
+}
