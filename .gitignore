@@ -11,10 +11,6 @@ unsloth-nvfp4-env/
 __pycache__/
 *.pyc
 
-# Downloaded CUDA repository package (host machine, ~3.8 GB)
-cuda-repo-*.deb
-cuda-ubuntu2604.pin
-
 # Local secrets / per-machine configuration
 .env
 

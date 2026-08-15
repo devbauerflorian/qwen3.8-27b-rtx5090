@@ -9,9 +9,6 @@
 models/
 .venv_download/
 unsloth-nvfp4-env/
-scripts/
-cuda-repo-*.deb
-cuda-ubuntu2604.pin
 
 # Repo metadata
 README.md

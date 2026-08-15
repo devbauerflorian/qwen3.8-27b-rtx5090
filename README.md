@@ -91,18 +91,13 @@ docker-compose.yml                  service definition (ports, volumes, serve fl
 setup.sh                            host prerequisites + model download (~20 GB)
 .env.example                        secret template (copy to .env)
 models/qwen3.8-27b-nvfp4/           model weights (empty in git, filled by setup.sh)
-scripts/install-host-cuda-toolkit.sh optional: CUDA toolkit on the host itself
 ```
 
-## Optional: CUDA toolkit on the host
+## Host requirements
 
-The container is fully self-contained; you only need the NVIDIA driver and
-the container toolkit on the host (installed by `setup.sh`). If you additionally
-want `nvcc` outside the container (e.g. to build kernels locally):
-
-```bash
-sudo ./scripts/install-host-cuda-toolkit.sh
-```
+The container is fully self-contained (it ships its own CUDA toolkit). On the
+host you only need the NVIDIA driver and the NVIDIA container toolkit, which
+`setup.sh` installs.
 
 ## Model & licensing
 
