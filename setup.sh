@@ -39,6 +39,10 @@ MODEL_DIR="${MODEL_DIR:-${ROOT_DIR}/models}"
 #   https://huggingface.co/gittensor-model-hub/Qwen3.8-27B-NVFP4-RTX5090
 MODEL_REPO="${MODEL_REPO:-gittensor-model-hub/Qwen3.8-27B-NVFP4-RTX5090}"
 MODEL_SUBDIR="${MODEL_SUBDIR:-qwen3.8-27b-nvfp4}"
+# Weights revision (known-good state, 2026-08-15) — pinned so a re-run always
+# fetches exactly what was tested. Override via .env; set MODEL_REVISION=
+# (empty) to always track the latest weights instead.
+MODEL_REVISION="${MODEL_REVISION:-69274a0d8dff5dd35bcee8290612f71e03b6e981}"
 VENV_DIR="${ROOT_DIR}/.venv_download"
 
 mkdir -p "${MODEL_DIR}"
@@ -55,17 +59,20 @@ fi
 # Activate the virtual environment
 source "${VENV_DIR}/bin/activate"
 
-# Install huggingface_hub if the new 'hf' CLI is not present
+# Install huggingface_hub (pinned) if the new 'hf' CLI is not present
 if ! command -v hf >/dev/null 2>&1; then
-  echo "Installing huggingface_hub..."
-  pip install -U "huggingface_hub[cli]"
+  echo "Installing huggingface_hub (pinned)..."
+  pip install -U "huggingface_hub[cli]==1.27.0"
 fi
 
-echo "Starting download..."
+echo "Starting download of ${MODEL_REPO}${MODEL_REVISION:+ @ ${MODEL_REVISION}} ..."
 
-# Accelerated download via Xet (replacing hf_transfer)
+# Pinned, accelerated download via Xet (replacing hf_transfer)
+REV_ARGS=()
+[ -n "${MODEL_REVISION}" ] && REV_ARGS+=(--revision "${MODEL_REVISION}")
 HF_XET_HIGH_PERFORMANCE=1 hf download \
   "${MODEL_REPO}" \
+  ${REV_ARGS[@]+"${REV_ARGS[@]}"} \
   --local-dir "${MODEL_DIR}/${MODEL_SUBDIR}"
 
 # Deactivate the virtual environment

@@ -138,6 +138,10 @@ the stock Qwen3.8-27B NVFP4 model:
 | `MODEL_SUBDIR` | local weights dir under `./models/` (and the container mount) | `qwen3.8-27b-nvfp4` |
 | `SERVED_MODEL_NAME` | value for `--served-model-name` | `qwen3.8-27b` |
 | `CONTAINER_NAME` | container name | `vllm` |
+| `MODEL_REVISION` | Hugging Face revision to download (weights pin, `setup.sh` only) | `69274a0d…` (known-good, 2026-08-15) |
+
+Set `MODEL_REVISION=` (empty) in `.env` if you rather want `setup.sh` to
+always download the latest weights.
 
 To serve a different model:
 
@@ -150,6 +154,27 @@ deliberately stay explicit in `docker-compose.yml`. If your model needs
 different ones, provide a full replacement of the `command` list in a second
 file, e.g. `mymodel.yml`, and run
 `docker compose -f docker-compose.yml -f mymodel.yml up -d`.
+
+## Pinned versions
+
+Everything that could break a rebuild is pinned — the Python stack is the
+full lock of the known-good production container (frozen 2026-08-15):
+
+| Input | Pinned | Where |
+|---|---|---|
+| vLLM stack (vllm 0.27.1, FlashInfer, CUTLASS DSL, torch, … 196 packages) | `requirements.lock` | `Dockerfile` |
+| uv / Python | `0.12.5` / `3.13.15` | `Dockerfile` |
+| CUDA base image | `13.3.1-devel-ubuntu22.04` | `Dockerfile` |
+| huggingface_hub (model download CLI) | `1.27.0` | `setup.sh` |
+| NVIDIA container toolkit | `1.20.0-1` | `setup.sh` |
+| Model weights | HF revision `69274a0d…` | `setup.sh` (override: `MODEL_REVISION`) |
+| Host driver (tested) | `610.43.02` (RTX 5090) | — |
+
+Updating the pins: change the relevant lines, rebuild the image, re-run the
+smoke test (`curl /v1/models` + a short chat), and commit. For a new
+stack, regenerate the lock from a working container:
+`docker exec <container> sh -c 'cd /app && uv pip freeze' > requirements.lock`
+(keep only the `package==version` lines).
 
 ## Project layout
 
