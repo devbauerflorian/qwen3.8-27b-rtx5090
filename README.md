@@ -6,6 +6,23 @@ Self-contained Docker deployment of
 served by [vLLM](https://github.com/vllm-project/vllm) with an OpenAI-compatible
 API — one 32 GB card, 256K-token context, auto tool choice included.
 
+## Purpose
+
+Who is this for, and why? This repo makes one specific thing work, end to
+end, on a **single consumer GPU (RTX 5090, 32 GB)**:
+
+- a **27B model** (Qwen3.8-27B) at **NVFP4 4-bit** — ~18.8 GB in VRAM
+- the **native 256K-token context** (FP8 KV cache) — most 4-bit recipes cap
+  out far earlier on 32 GB
+- an **OpenAI-compatible API** with reasoning + tool calling that any
+  OpenAI-SDK client can point at — self-hosted, private, no per-token costs
+
+It is a *deployment recipe*, not a framework: the weights come from
+Hugging Face, and this repo is the tested glue (Docker image, serve flags,
+RAM/tuning) that actually works on Blackwell — the part that usually takes
+people days to get right (FlashInfer SM120 JIT, `cutlass-dsl`, graph-build
+OOM).
+
 ## Highlights
 
 - Model: [Qwen3.8-27B-NVFP4-RTX5090](https://huggingface.co/gittensor-model-hub/Qwen3.8-27B-NVFP4-RTX5090)
@@ -62,6 +79,7 @@ curl http://localhost:8020/v1/chat/completions \
 Any OpenAI SDK works, e.g. with Python:
 
 ```python
+import os
 from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:8020/v1", api_key=os.environ["VLLM_API_KEY"])
@@ -70,6 +88,27 @@ resp = client.chat.completions.create(
     messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
+
+## First boot & troubleshooting
+
+Expect a slow **first** start (subsequent starts are much faster):
+
+- image build: vLLM + FlashInfer wheels
+- container boot: FlashInfer JIT-compiles the Blackwell FP4 GEMMs (`nvcc`
+  inside the container — normal), then CUDA graph capture (RAM-hungry)
+- the endpoint is ready once the logs show `Application startup complete`:
+
+```bash
+docker logs -f vllm
+```
+
+| Symptom | Likely cause / fix |
+|---|---|
+| stuck in "Compiling kernels…" / `nvcc` | normal first boot (JIT); skipped on later boots |
+| OOM crash during graph capture | lower `MAX_JOBS` / `NVCC_THREADS` (e.g. `2`) |
+| port 8020 in use | change the host port in `docker-compose.yml` `ports` |
+| "model folder … does not exist" | `setup.sh` missing/incomplete — weights absent in `./models/` |
+| HTTP 401 from the API | `VLLM_API_KEY` set in `.env` — send it as `Authorization: Bearer …` |
 
 ## Configuration
 
