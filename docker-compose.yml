@@ -5,6 +5,8 @@
 #   MODEL_SUBDIR        weights dir under ./models/ (setup.sh downloads into it)
 #   SERVED_MODEL_NAME   value for --served-model-name
 #   VLLM_API_KEY        bearer key, empty = no auth
+#   VLLM_HOST_PORT      host port for the direct vLLM API (default 8020)
+#   GATEWAY_HOST_PORT   host port for the caddy gateway (default 8030)
 #
 services:
   vllm:
@@ -13,9 +15,11 @@ services:
       dockerfile: Dockerfile
     container_name: ${CONTAINER_NAME:-vllm}
     restart: "always"
-    # No host port: vllm is internal-only. The caddy gateway on 8020 (the
-    # port clients have always used for the API) and Prometheus reach it on
-    # the docker network at vllm:8000.
+    # Host port 8020 (VLLM_HOST_PORT) is the direct full vLLM API
+    # (OpenAI-compatible /v1/* plus /metrics, /health and /docs; bearer
+    # auth = VLLM_API_KEY on the API routes; open when the key is empty).
+    # The caddy gateway on 8030 and Prometheus also reach it on the docker
+    # network at vllm:8000.
     volumes:
       # Model weights, downloaded by setup.sh, mounted read-only
       - ./models/${MODEL_SUBDIR:-qwen3.8-27b-nvfp4}:/models/${MODEL_SUBDIR:-qwen3.8-27b-nvfp4}:ro
@@ -32,6 +36,9 @@ services:
       # Secrets — loaded from .env (see .env.example), leave empty to disable auth
       - VLLM_API_KEY=${VLLM_API_KEY:-}
     shm_size: "16gb"
+    ports:
+      # VLLM_HOST_PORT from .env (default 8020); container port stays 8000
+      - "${VLLM_HOST_PORT:-8020}:8000"
     ipc: host
     deploy:
       resources:
@@ -69,9 +76,10 @@ services:
       - --port
       - "8000"
 
-  # Public gateway on host port 8020 — the port clients have always used
-  # for the API; it is now owned by caddy, and the vllm container is
-  # internal-only. Every routed path requires HTTP Basic auth
+  # Optional Basic-auth gateway on host port 8030 (GATEWAY_HOST_PORT; the
+  # vLLM API itself is served directly on 8020, VLLM_HOST_PORT). Expose
+  # 8030 externally (e.g. to host the OpenAI-compatible endpoint behind
+  # Basic auth) — 8020 stays as the direct endpoint. Every routed path requires HTTP Basic auth
   # (METRICS_USER / METRICS_HASH from .env):
   #   /v1, /v1/*    -> vLLM (caddy translates Basic auth into the vLLM
   #                    bearer token, VLLM_API_KEY from .env, upstream)
@@ -85,7 +93,8 @@ services:
     container_name: caddy-vllm
     restart: "always"
     ports:
-      - "8020:8020"
+      # GATEWAY_HOST_PORT from .env (default 8030); container port stays 8030
+      - "${GATEWAY_HOST_PORT:-8030}:8030"
     environment:
       - METRICS_USER=${METRICS_USER:-metrics}
       - METRICS_HASH=${METRICS_HASH:-}
@@ -144,8 +153,8 @@ services:
 
   # Per-GPU metrics (utilization, memory, power, temps). Exposes
   # DCGM_FI_DEV_* names on the docker network only (Prometheus scrapes
-  # dcgm-exporter:9400); public access goes through the caddy gateway on
-  # 8020 (/dcgm/metrics) — no host port of its own.
+  # dcgm-exporter:9400); external access goes through the caddy gateway on
+  # 8030 (/dcgm/metrics) — no host port of its own.
   # See prometheus/prometheus.yml (job "dcgm").
   #
   # Built from a public base image + pypi (dcgm-exporter/), so no nvcr.io

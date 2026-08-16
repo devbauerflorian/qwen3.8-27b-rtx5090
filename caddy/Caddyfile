@@ -1,8 +1,11 @@
-# Public gateway for the vLLM server, host port 8020.
+# Public gateway for the vLLM server, host port 8030.
 #
-# caddy owns the port clients have always used for the API; the vllm
-# container is internal-only. Only three paths are routed — everything
-# else is not secured and falls through to caddy's empty default response.
+# The vLLM API is served directly on host port 8020 (vllm container,
+# bearer auth via VLLM_API_KEY). This gateway is the optional,
+# externally-exposable front: it adds HTTP Basic auth (translated into
+# the vLLM bearer token) plus metrics routes. Only three paths are
+# routed — everything else falls through to caddy's empty default
+# response.
 # All routed paths require HTTP Basic auth (METRICS_USER / METRICS_HASH
 # from .env; caddy fails closed if METRICS_HASH is unset):
 #   /v1, /v1/*  -> vLLM (caddy translates Basic auth into the vLLM bearer
@@ -18,7 +21,7 @@
 	admin off
 }
 
-:8020 {
+:8030 {
 	# (caddy 2.11: multiple paths need a named matcher, not `handle /v1 /v1/*`)
 	@v1 {
 		path /v1 /v1/*

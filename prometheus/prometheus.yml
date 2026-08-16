@@ -2,10 +2,12 @@
 #
 # Both targets are scraped directly on the docker network — no auth needed
 # there: vllm:8000 (engine + request metrics) and dcgm-exporter:9400
-# (per-GPU: utilization, memory, power, temps). The public face (port 8020)
-# is the caddy gateway, which routes /v1/*, /metrics and /dcgm/metrics
-# behind HTTP Basic auth (METRICS_USER / METRICS_HASH from .env). Block
-# 8020 at the firewall if you want no external exposure at all.
+# (per-GPU: utilization, memory, power, temps). The authenticated public
+# face is the caddy gateway on port 8030, which routes /v1/*, /metrics and
+# /dcgm/metrics behind HTTP Basic auth (METRICS_USER / METRICS_HASH from
+# .env); the vLLM API is also reachable directly on 8020 (bearer key or
+# open). Block 8020/8030 at the firewall if you want no external
+# exposure at all.
 #
 # The Prometheus UI is bound to 127.0.0.1:9090 only (see docker-compose.yml).
 # Access it locally or via SSH tunnel.
