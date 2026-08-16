@@ -14,6 +14,10 @@ __pycache__/
 # Local secrets / per-machine configuration
 .env
 
+# Benchmark run artifacts (machine-specific)
+benchmarks/results/*
+!benchmarks/results/.gitkeep
+
 # Editor and OS noise
 .vscode/
 .idea/
