@@ -106,11 +106,61 @@ the suite), only the unseen suffix is prefilled:
 | 128K | 30.95 | 0.51 |
 | 250K | 104.18 | 0.65 |
 
-Measured on a shared host: other GPU workloads (including the agent sessions
-served by this very stack) can shift the numbers a bit. For aggregate
-throughput under parallel load, run the companion suite
-`benchmarks/parallel_bench.py` — concurrent-request runs (aggregate tok/s vs
-concurrency) to re-measure the ~1,030 tok/s @ 16 figure above on your host.
+### Parallel load
+
+The companion suite `benchmarks/parallel_bench.py` measures aggregate
+throughput under concurrent load: every batch fires ALL of its requests at
+the same instant (a threading barrier), each with unique padding, so the
+timed prefill stays cold despite `--enable-prefix-caching`. Each
+context x concurrency combo runs 1 warm-up + 3 timed batches; the
+throughput/wall cells are medians over the timed batches and the latency
+columns pool every timed request of the combo. A level is skipped at a
+context once `level x (context + 256-completion)` exceeds the ~265K-token
+KV pool — c=16 fits only at 8K, c=8 up to 32K, c=4 up to 64K, c=2 up to
+128K — so no batch preempts.
+
+Tables from 2026-08-16 (`benchmarks/results/`); the run measured 8K–64K.
+
+**8K context**
+
+| concurrency | wall (s) | req/s | output (tok/s) | total (tok/s) | TTFT p50 (s) | TTFT p95 (s) | E2E p50 (s) | E2E p95 (s) | decode (tok/s/req) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 3.86 | 0.26 | 66 | 2,207 | 0.60 | 0.60 | 3.85 | 3.85 | 78.3 |
+| 2 | 4.81 | 0.42 | 106 | 3,537 | 0.96 | 1.18 | 4.78 | 4.81 | 66.9 |
+| 4 | 6.16 | 0.65 | 166 | 5,525 | 1.62 | 2.35 | 6.05 | 6.15 | 57.8 |
+| 8 | 8.55 | 0.94 | 239 | 7,963 | 2.79 | 4.72 | 8.29 | 8.54 | 48.4 |
+| 16 | 13.86 | 1.15 | 296 | 9,825 | 5.17 | 9.39 | 13.31 | 13.81 | 34.7 |
+
+**32K context**
+
+| concurrency | wall (s) | req/s | output (tok/s) | total (tok/s) | TTFT p50 (s) | TTFT p95 (s) | E2E p50 (s) | E2E p95 (s) | decode (tok/s/req) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 6.79 | 0.15 | 38 | 4,871 | 3.41 | 3.41 | 6.79 | 6.79 | 75.4 |
+| 2 | 10.64 | 0.19 | 48 | 6,219 | 5.12 | 6.79 | 10.49 | 10.63 | 51.7 |
+| 4 | 17.83 | 0.22 | 57 | 7,423 | 8.56 | 13.64 | 17.38 | 17.82 | 34.9 |
+| 8 | 37.10 | 0.22 | 55 | 7,134 | 15.45 | 33.23 | 34.00 | 37.07 | 20.6 |
+
+**64K context**
+
+| concurrency | wall (s) | req/s | output (tok/s) | total (tok/s) | TTFT p50 (s) | TTFT p95 (s) | E2E p50 (s) | E2E p95 (s) | decode (tok/s/req) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 13.22 | 0.08 | 19 | 4,982 | 9.67 | 9.67 | 13.21 | 13.21 | 72.1 |
+| 2 | 23.44 | 0.09 | 22 | 5,619 | 14.53 | 19.34 | 23.13 | 23.43 | 40.9 |
+| 4 | 45.55 | 0.09 | 22 | 5,783 | 24.23 | 41.88 | 42.14 | 45.52 | 27.9 |
+
+The c=1 rows agree with the single-stream context suite above (~75–78
+tok/s decode). Aggregate output throughput scales near-linearly with
+concurrency at 8K (66 -> 296 tok/s from c=1 to c=16; 9,825 total tok/s
+including the prefilled prompts), while per-request decode speed and TTFT
+degrade as requests queue behind each other's prefill (32K: 34.9 -> 20.6
+tok/s/req and TTFT p95 13.6 -> 33.2 s from c=4 to c=8; past its peak the
+aggregate output throughput even dips slightly at 32K and 64K). Measured on
+a shared host: other GPU workloads (including the agent sessions served by
+this very stack) can shift the numbers a bit. Re-measure with
+`.venv_download/bin/python benchmarks/parallel_bench.py` (levels, contexts,
+and run counts are env-configurable — `BENCH_LEVELS`, `BENCH_CONTEXTS`,
+`BENCH_RUNS`; `--quick` for a fast sanity check; raw runs land in
+`benchmarks/results/`).
 
 ## Requirements
 
